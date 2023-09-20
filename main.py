@@ -55,10 +55,8 @@ class ProcessingUnit:
         self.psum_out = Port()
         
     def run_cycle(self):
-        # act 전달
         self.act_reg.set(self.act_in.get())
         
-        # 다음으로, psum 전달 + psum reset
         if self.psum_reg.get() != 0:
             self.psum_reg.reset()
             if self.act_reg.get() is not None:
@@ -142,15 +140,6 @@ class SystolicArray:
             for i in range(len(self.systolic_array)):
                 print("#{}\tact_nxt {}\tact_cur {}\tpsum_nxt {}\tpsum_cur {}".format(i, self.systolic_array[i].act_reg.nxt_st, self.systolic_array[i].act_reg.cur_st, self.systolic_array[i].psum_reg.nxt_st, self.systolic_array[i].psum_reg.cur_st))
             print()                            
-
-            
-
-
-            # # st dbg        
-            # for i in range(len(self.systolic_array)):            
-            #     print("#{}\tact_nxt {}\tact_cur {}\tpsum_nxt {}\tpsum_cur {}".format(i, self.systolic_array[i].act_reg.nxt_st, self.systolic_array[i].act_reg.cur_st, self.systolic_array[i].psum_reg.nxt_st, self.systolic_array[i].psum_reg.cur_st))
-            # print()
-            # # ed dbg
             
         a = np.array(self.result)
         a.reshape(self.act_row, self.act_row)
