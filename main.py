@@ -6,13 +6,13 @@ class Register:
         self.nxt_st = value
         
         if value is not None:
-            self.psum_flag = True
+            self.psum_row_cnt = True
         else:
-            self.psum_flag = False
+            self.psum_row_cnt = False
     
     # sets the next state of the register with a value
     def set(self, value):
-        if self.psum_flag is True:
+        if self.psum_row_cnt is True:
             self.nxt_st += value
         else:
             self.nxt_st = value
@@ -26,7 +26,7 @@ class Register:
         self.cur_st = self.nxt_st
         
     def reset(self):
-        if self.psum_flag is True:
+        if self.psum_row_cnt is True:
             self.nxt_st = 0
 
 class Port:
@@ -53,15 +53,21 @@ class ProcessingUnit:
         self.psum_in  = Port()
         self.psum_reg = Register(0)
         self.psum_out = Port()
+        self.psum_row_cnt = 0
         
-    def run_cycle(self):
+    def run_cycle(self, result, i):
         self.act_reg.set(self.act_in.get())
+        
+
         
         if self.psum_reg.get() != 0:
             self.psum_reg.reset()
+            print("current result row", self.psum_row_cnt)
+            print("current result col", i)            
+            result[self.psum_row_cnt][i] = self.psum_reg.get()
+            self.psum_row_cnt += 1
             if self.act_reg.get() is not None:
                 self.multiply()
-            return self.psum_reg.get()
         else:
             if self.act_reg.get() is not None:
                 self.multiply()
@@ -88,70 +94,75 @@ class SystolicArray:
     def __init__(self, activation, weight):
         self.systolic_array = None
         self.activation     = activation                
+        self.act_col        = len(activation[0])
         self.act_row        = len(activation)
         self.wgt            = weight
-        self.result         = []
+        self.wgt_col        = len(self.wgt[0])
+        self.wgt_row        = len(self.wgt)
+        self.result         = [[0 for _ in range(self.wgt_col)] for _ in range(self.act_row)]
     
-    def create(self):
+    def create(self):                
         # makes a systolic array
-        self.systolic_array = [ProcessingUnit() for _ in range(self.act_row)]
+        self.systolic_array = [[ProcessingUnit() for _ in range(self.wgt_col)] for _ in range(self.wgt_row)]
 
         # updates the given weight
-        for i in range(self.act_row):
-            self.systolic_array[i].update_wgt(self.wgt[i])
+        for i in range(self.wgt_col):
+            for j in range(self.wgt_row):
+                self.systolic_array[j][i].update_wgt(self.wgt[j][i])
         
         # links each ports with others
-        for i in range(self.act_row):
-            if i == 0:
-                self.systolic_array[i].link(None)
-            else:
-                self.systolic_array[i].link(self.systolic_array[i-1].act_out)    
+        for i in range(self.wgt_col):
+            for j in range(self.wgt_row):
+                if i == 0:
+                    self.systolic_array[j][i].link(None)
+                else:
+                    self.systolic_array[j][i].link(self.systolic_array[j][i-1].act_out)    
                 
     def simulate(self):
         self.create()
         rotate_cnt = 1
         
-        # PE0의 in port가 가르키는 act 변경            
-        self.systolic_array[0].link(activation[0])
-        self.systolic_array[0].run_cycle()        
-        
-        while len(self.result) < self.act_row ** 2:
+        # PE0의 in port가 가르키는 act 변경
+        for j in range(self.wgt_row):
+            self.systolic_array[j][0].link(activation[0][0])
+            self.systolic_array[j][0].run_cycle(self.result, 0)
+            
+        while self.result[self.act_row-1][self.wgt_col-1] == 0:
             # rising edge
-            for i in range(len(self.systolic_array)):
-                self.systolic_array[i].rising_edge()                
+            for i in range(self.wgt_col):
+                for j in range(self.wgt_row):
+                    self.systolic_array[j][i].rising_edge()                
 
             print("after rising")
-            for i in range(len(self.systolic_array)):
-                print("#{}\tact_nxt {}\tact_cur {}\tpsum_nxt {}\tpsum_cur {}".format(i, self.systolic_array[i].act_reg.nxt_st, self.systolic_array[i].act_reg.cur_st, self.systolic_array[i].psum_reg.nxt_st, self.systolic_array[i].psum_reg.cur_st))
-
-            if rotate_cnt < len(activation):
-                self.systolic_array[0].link(activation[rotate_cnt])
-                rotate_cnt += 1
-            else :
-                self.systolic_array[0].link(None)
+            for i in range(self.wgt_col):
+                for j in range(self.wgt_row):
+                    print("#{}\tact_nxt {}\tact_cur {}\tpsum_nxt {}\tpsum_cur {}".format(i, self.systolic_array[j][i].act_reg.nxt_st, self.systolic_array[j][i].act_reg.cur_st, self.systolic_array[j][i].psum_reg.nxt_st, self.systolic_array[j][i].psum_reg.cur_st))
+            # inputs activation
+            for j in range(self.wgt_row):
+                if rotate_cnt < self.act_row:
+                    self.systolic_array[j][0].link(activation[rotate_cnt][j])
+                    rotate_cnt += 1
+                else :
+                    self.systolic_array[j][0].link(None)
 
             # clock cycle : 이때 in -> act가 된다.
-            for i in range(len(self.systolic_array)):
-                result = self.systolic_array[i].run_cycle()
-                if result is not None:
-                    self.result.append(result)
+            for i in range(self.wgt_col):
+                for j in range(self.wgt_row):
+                    self.systolic_array[j][i].run_cycle(self.result, i)
                     
             print("after cycle")
-            for i in range(len(self.systolic_array)):
-                print("#{}\tact_nxt {}\tact_cur {}\tpsum_nxt {}\tpsum_cur {}".format(i, self.systolic_array[i].act_reg.nxt_st, self.systolic_array[i].act_reg.cur_st, self.systolic_array[i].psum_reg.nxt_st, self.systolic_array[i].psum_reg.cur_st))
-            print()                            
-            
-        a = np.array(self.result)
-        a.reshape(self.act_row, self.act_row)
-        return a
-        
-                
+            for i in range(self.wgt_col):
+                for j in range(self.wgt_row):
+                    print("#{}\tact_nxt {}\tact_cur {}\tpsum_nxt {}\tpsum_cur {}".format(i, self.systolic_array[j][i].act_reg.nxt_st, self.systolic_array[j][i].act_reg.cur_st, self.systolic_array[j][i].psum_reg.nxt_st, self.systolic_array[j][i].psum_reg.cur_st))
+            print()
+        return self.result
 
 if __name__ == "__main__":
-    activation     = [1, 2, 3]
-    weight         = [1, 2, 3]
+    activation     = [[1],
+                      [2], 
+                      [3],
+                      [4]]
+    weight         = [[1]]
     systolic_array = SystolicArray(activation, weight)
-    systolic_array.create()
-    a = systolic_array.simulate()
-    
-    r = [[0 for _ in range(len(activation))] for _ in range(len(activation))]    
+    result = np.array(systolic_array.simulate())
+    print(result)
